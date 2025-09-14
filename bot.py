@@ -108,6 +108,12 @@ class SolanaWalletMonitor:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
+            # Check if table exists first
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='processed_signatures'")
+            if not cursor.fetchone():
+                conn.close()
+                return False
+            
             cursor.execute('SELECT COUNT(*) FROM processed_signatures WHERE signature = ?', (signature,))
             count = cursor.fetchone()[0]
             conn.close()
@@ -123,6 +129,19 @@ class SolanaWalletMonitor:
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
+            
+            # Check if table exists first
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='processed_signatures'")
+            if not cursor.fetchone():
+                # Create table if it doesn't exist
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS processed_signatures (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        signature TEXT UNIQUE NOT NULL,
+                        processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
+                conn.commit()
             
             cursor.execute('INSERT OR IGNORE INTO processed_signatures (signature) VALUES (?)', (signature,))
             conn.commit()
@@ -173,9 +192,12 @@ class SolanaWalletMonitor:
             cursor.execute('SELECT COUNT(*) FROM processed_tokens')
             token_count = cursor.fetchone()[0]
             
-            # Count processed signatures
-            cursor.execute('SELECT COUNT(*) FROM processed_signatures')
-            signature_count = cursor.fetchone()[0]
+            # Count processed signatures (if table exists)
+            signature_count = 0
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='processed_signatures'")
+            if cursor.fetchone():
+                cursor.execute('SELECT COUNT(*) FROM processed_signatures')
+                signature_count = cursor.fetchone()[0]
             
             # Get recent tokens (last 24 hours)
             cursor.execute('''
@@ -850,9 +872,9 @@ class SolanaWalletMonitor:
                     
                     for tx in transactions:
                         signature = tx['signature']
-                        # Skip if already processed
-                        if self.is_signature_processed(signature):
-                            continue
+                        # Skip signature check - we only check by mint address
+                        # if self.is_signature_processed(signature):
+                        #     continue
                         
                         # Check ALL transactions - no skipping for age
                         tx_time = tx.get('blockTime', 0)
@@ -904,8 +926,8 @@ class SolanaWalletMonitor:
                                 
                                 self.send_telegram_alert(alert_message, chat_id)
                         
-                        # Mark signature as processed in database
-                        self.mark_signature_processed(signature)
+                        # Skip signature marking - we only track by mint address
+                        # self.mark_signature_processed(signature)
                     
                     if new_token_count > 0:
                         print(f"🎉 Wallet {wallet_address[:8]}... - Found {new_token_count} new token purchases!")
@@ -1028,12 +1050,11 @@ Welcome! I can monitor Solana wallets for new token launches.
 
 🪙 *Unique Mint Addresses:* {stats['unique_mints']}
 🔢 *Total Processed Tokens:* {stats['total_tokens']}
-📝 *Total Processed Signatures:* {stats['total_signatures']}
 ⏰ *Recent Tokens (24h):* {stats['recent_tokens_24h']}
 
 💾 *Database:* `token_alerts.db`
 🧹 *Auto Cleanup:* Every 7 days
-🔒 *Duplicate Prevention:* By mint address"""
+🔒 *Duplicate Prevention:* By mint address only"""
             self.send_message(chat_id, stats_msg)
             
         elif command == "/help":
