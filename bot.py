@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 class SolanaWalletMonitor:
-    def __init__(self, bot_token: str, rpc_url: str = "https://api.mainnet-beta.solana.com"):
+    def __init__(self, bot_token: str, rpc_url: str = "https://solana-mainnet.g.alchemy.com/v2/demo"):
         self.bot_token = bot_token
         self.rpc_url = rpc_url
         self.processed_signatures = set()
@@ -382,6 +382,14 @@ class SolanaWalletMonitor:
                     if program_id == "spl-associated-token-account" and instruction_type:
                         print(f"✅ Found inner associated token instruction: {instruction_type}")
                         return True
+                    
+                    # Check for system createAccount for token program (NEW)
+                    if program_id == "system" and instruction_type == "createAccount":
+                        parsed_info = parsed.get('info', {})
+                        owner = parsed_info.get('owner', '')
+                        if 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' in owner:
+                            print(f"✅ Found system createAccount for token program: {instruction_type}")
+                            return True
             
             # Check for token balance changes (new tokens)
             pre_balances = meta.get('preTokenBalances', [])
