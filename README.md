@@ -49,7 +49,7 @@ When a new token is detected, it fetches metadata from multiple sources and send
 ## 🚨 Alert Format
 
 ```
-🚨 NEW TOKEN LAUNCH DETECTED! 🚨
+🚨 New Token Buy Alert 🚨
 
 🪙 Token: Token Name (SYMBOL)
 🔗 Mint: mint_address

@@ -564,7 +564,7 @@ class SolanaWalletMonitor:
         else:
             token_emoji = "🪙"
         
-        message = f"""🚨 *NEW TOKEN LAUNCH DETECTED!* 🚨
+        message = f"""🚨 *New Token Buy Alert* 🚨
  
  {token_emoji} *Token:* {token_name} ({token_symbol})
  🔗 *Mint:* `{token_info['mint']}`
