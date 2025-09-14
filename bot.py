@@ -570,7 +570,7 @@ class SolanaWalletMonitor:
  🔗 *Mint:* `{token_info['mint']}`
  💰 *Amount:* {amount} {token_symbol}
  ⏰ *Age:* {token_age}
- 🔍 *TX:* [Click Here](https://solscan.io/tx/{signature})
+ 🔍 *TX:* `{signature}`
  
  👤 *Wallet:* `{wallet_address}`
  🕐 *Time:* {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}
@@ -579,6 +579,7 @@ class SolanaWalletMonitor:
  • [View on PumpFun](https://pump.fun/{token_info['mint']})
  • [View on DexScreener](https://dexscreener.com/solana/{token_info['mint']})
  • [View on Solscan](https://solscan.io/token/{token_info['mint']})
+ • [TX Details](https://solscan.io/tx/{signature})
  • [Add to Wallet](solana:{token_info['mint']})"""
         return message.strip()
     
