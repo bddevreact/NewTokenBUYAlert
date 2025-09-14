@@ -42,14 +42,15 @@ When a new token is detected, it fetches metadata from multiple sources and send
 ## 🗄️ Database System
 
 The bot uses SQLite database (`token_alerts.db`) to:
-- **Prevent Duplicate Alerts**: Tracks processed tokens by mint address (unique constraint)
+- **Prevent Duplicate Alerts**: Tracks processed tokens by token name + mint address combination
 - **Transaction History**: Stores processed transaction signatures
 - **Auto Cleanup**: Automatically removes entries older than 7 days
 - **Statistics**: Provides database stats via `/stats` command
 
 ### Database Tables:
 - `processed_tokens` - Tracks detected tokens (name, mint, wallet, signature, timestamp)
-  - `mint_address` has UNIQUE constraint to prevent duplicate alerts
+  - `token_name + mint_address` combination has UNIQUE constraint to prevent duplicate alerts
+  - Allows same mint address for different token names (e.g., different SOL tokens)
 - `processed_signatures` - Tracks processed transaction signatures
 
 ## 📊 Supported APIs

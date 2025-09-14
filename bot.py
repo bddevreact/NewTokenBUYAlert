@@ -35,10 +35,11 @@ class SolanaWalletMonitor:
                 CREATE TABLE IF NOT EXISTS processed_tokens (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     token_name TEXT NOT NULL,
-                    mint_address TEXT UNIQUE NOT NULL,
+                    mint_address TEXT NOT NULL,
                     wallet_address TEXT NOT NULL,
                     transaction_signature TEXT NOT NULL,
-                    detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(token_name, mint_address)
                 )
             ''')
             
@@ -59,22 +60,22 @@ class SolanaWalletMonitor:
             logger.error(f"Error initializing database: {e}")
     
     def is_token_processed(self, token_name: str, mint_address: str) -> bool:
-        """Check if token has already been processed (by mint address)"""
+        """Check if token has already been processed (by token name + mint address combination)"""
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
-            # Check by mint address first (primary check)
+            # Check by token name + mint address combination (more specific)
             cursor.execute('''
                 SELECT COUNT(*) FROM processed_tokens 
-                WHERE mint_address = ?
-            ''', (mint_address,))
+                WHERE token_name = ? AND mint_address = ?
+            ''', (token_name, mint_address))
             
             count = cursor.fetchone()[0]
             conn.close()
             
             if count > 0:
-                print(f"🔍 Found existing mint address: {mint_address[:8]}...")
+                print(f"🔍 Found existing token: {token_name} ({mint_address[:8]}...)")
                 return True
             
             return False
@@ -184,9 +185,9 @@ class SolanaWalletMonitor:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
-            # Count unique mint addresses (processed tokens)
-            cursor.execute('SELECT COUNT(DISTINCT mint_address) FROM processed_tokens')
-            unique_mints = cursor.fetchone()[0]
+            # Count unique token name + mint address combinations
+            cursor.execute('SELECT COUNT(*) FROM processed_tokens')
+            unique_combinations = cursor.fetchone()[0]
             
             # Count total processed tokens
             cursor.execute('SELECT COUNT(*) FROM processed_tokens')
@@ -209,7 +210,7 @@ class SolanaWalletMonitor:
             conn.close()
             
             return {
-                'unique_mints': unique_mints,
+                'unique_combinations': unique_combinations,
                 'total_tokens': token_count,
                 'total_signatures': signature_count,
                 'recent_tokens_24h': recent_tokens
@@ -217,7 +218,7 @@ class SolanaWalletMonitor:
             
         except Exception as e:
             logger.error(f"Error getting database stats: {e}")
-            return {'unique_mints': 0, 'total_tokens': 0, 'total_signatures': 0, 'recent_tokens_24h': 0}
+            return {'unique_combinations': 0, 'total_tokens': 0, 'total_signatures': 0, 'recent_tokens_24h': 0}
         
     def get_recent_transactions(self, wallet_address: str, limit: int = 50) -> List[Dict]:
         """Get recent transactions for the specified wallet using RPC"""
@@ -1056,13 +1057,13 @@ Welcome! I can monitor Solana wallets for new token launches.
             stats = self.monitor.get_database_stats()
             stats_msg = f"""📊 *Database Statistics*
 
-🪙 *Unique Mint Addresses:* {stats['unique_mints']}
+🪙 *Unique Token Combinations:* {stats['unique_combinations']}
 🔢 *Total Processed Tokens:* {stats['total_tokens']}
 ⏰ *Recent Tokens (24h):* {stats['recent_tokens_24h']}
 
 💾 *Database:* `token_alerts.db`
 🧹 *Auto Cleanup:* Every 7 days
-🔒 *Duplicate Prevention:* By mint address only"""
+🔒 *Duplicate Prevention:* By token name + mint address"""
             self.send_message(chat_id, stats_msg)
             
         elif command == "/help":
