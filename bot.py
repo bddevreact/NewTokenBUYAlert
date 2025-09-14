@@ -3,6 +3,7 @@ import requests
 import time
 import json
 import threading
+import sqlite3
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Set
 import logging
@@ -18,6 +19,173 @@ class SolanaWalletMonitor:
         self.processed_signatures = set()
         self.monitored_wallets = {}  # {wallet_address: {chat_id, last_check_time}}
         self.running = False
+        
+        # Initialize database
+        self.db_path = "token_alerts.db"
+        self.init_database()
+    
+    def init_database(self):
+        """Initialize SQLite database for tracking processed tokens"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # Create processed_tokens table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS processed_tokens (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    token_name TEXT NOT NULL,
+                    mint_address TEXT NOT NULL,
+                    wallet_address TEXT NOT NULL,
+                    transaction_signature TEXT NOT NULL,
+                    detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(token_name, mint_address)
+                )
+            ''')
+            
+            # Create processed_signatures table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS processed_signatures (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    signature TEXT UNIQUE NOT NULL,
+                    processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            conn.commit()
+            conn.close()
+            logger.info("Database initialized successfully")
+            
+        except Exception as e:
+            logger.error(f"Error initializing database: {e}")
+    
+    def is_token_processed(self, token_name: str, mint_address: str) -> bool:
+        """Check if token has already been processed"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT COUNT(*) FROM processed_tokens 
+                WHERE token_name = ? AND mint_address = ?
+            ''', (token_name, mint_address))
+            
+            count = cursor.fetchone()[0]
+            conn.close()
+            
+            return count > 0
+            
+        except Exception as e:
+            logger.error(f"Error checking processed token: {e}")
+            return False
+    
+    def mark_token_processed(self, token_name: str, mint_address: str, wallet_address: str, signature: str):
+        """Mark token as processed in database"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                INSERT OR IGNORE INTO processed_tokens 
+                (token_name, mint_address, wallet_address, transaction_signature)
+                VALUES (?, ?, ?, ?)
+            ''', (token_name, mint_address, wallet_address, signature))
+            
+            conn.commit()
+            conn.close()
+            
+        except Exception as e:
+            logger.error(f"Error marking token as processed: {e}")
+    
+    def is_signature_processed(self, signature: str) -> bool:
+        """Check if transaction signature has already been processed"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('SELECT COUNT(*) FROM processed_signatures WHERE signature = ?', (signature,))
+            count = cursor.fetchone()[0]
+            conn.close()
+            
+            return count > 0
+            
+        except Exception as e:
+            logger.error(f"Error checking processed signature: {e}")
+            return False
+    
+    def mark_signature_processed(self, signature: str):
+        """Mark transaction signature as processed in database"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('INSERT OR IGNORE INTO processed_signatures (signature) VALUES (?)', (signature,))
+            conn.commit()
+            conn.close()
+            
+        except Exception as e:
+            logger.error(f"Error marking signature as processed: {e}")
+    
+    def cleanup_old_entries(self, days_to_keep: int = 7):
+        """Clean up old database entries to prevent database from growing too large"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # Delete old processed tokens (older than specified days)
+            cursor.execute('''
+                DELETE FROM processed_tokens 
+                WHERE detected_at < datetime('now', '-{} days')
+            '''.format(days_to_keep))
+            
+            # Delete old processed signatures (older than specified days)
+            cursor.execute('''
+                DELETE FROM processed_signatures 
+                WHERE processed_at < datetime('now', '-{} days')
+            '''.format(days_to_keep))
+            
+            deleted_tokens = cursor.rowcount
+            conn.commit()
+            conn.close()
+            
+            if deleted_tokens > 0:
+                logger.info(f"Cleaned up {deleted_tokens} old database entries")
+                
+        except Exception as e:
+            logger.error(f"Error cleaning up old entries: {e}")
+    
+    def get_database_stats(self) -> Dict:
+        """Get database statistics"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # Count processed tokens
+            cursor.execute('SELECT COUNT(*) FROM processed_tokens')
+            token_count = cursor.fetchone()[0]
+            
+            # Count processed signatures
+            cursor.execute('SELECT COUNT(*) FROM processed_signatures')
+            signature_count = cursor.fetchone()[0]
+            
+            # Get recent tokens (last 24 hours)
+            cursor.execute('''
+                SELECT COUNT(*) FROM processed_tokens 
+                WHERE detected_at > datetime('now', '-1 day')
+            ''')
+            recent_tokens = cursor.fetchone()[0]
+            
+            conn.close()
+            
+            return {
+                'total_tokens': token_count,
+                'total_signatures': signature_count,
+                'recent_tokens_24h': recent_tokens
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting database stats: {e}")
+            return {'total_tokens': 0, 'total_signatures': 0, 'recent_tokens_24h': 0}
         
     def get_recent_transactions(self, wallet_address: str, limit: int = 50) -> List[Dict]:
         """Get recent transactions for the specified wallet using RPC"""
@@ -650,6 +818,10 @@ class SolanaWalletMonitor:
         
         while self.running:
             try:
+                # Cleanup old database entries every hour
+                if int(time.time()) % 3600 == 0:
+                    self.cleanup_old_entries()
+                
                 if not self.monitored_wallets:
                     print("📭 No wallets to monitor. Use /addwallet to add wallets.")
                     time.sleep(check_interval)
@@ -668,10 +840,8 @@ class SolanaWalletMonitor:
                     
                     for tx in transactions:
                         signature = tx['signature']
-                        signature_key = f"{wallet_address}_{signature}"
-                        
                         # Skip if already processed
-                        if signature_key in self.processed_signatures:
+                        if self.is_signature_processed(signature):
                             continue
                         
                         # Check ALL transactions - no skipping for age
@@ -696,13 +866,25 @@ class SolanaWalletMonitor:
                             token_info = self.extract_new_token_info(tx_details)
                             
                             if token_info:
+                                # Get token metadata first
+                                token_metadata = self.get_token_metadata(token_info['mint'])
+                                token_name = token_metadata['name']
+                                mint_address = token_info['mint']
+                                
+                                # Check for duplicate token in database
+                                if self.is_token_processed(token_name, mint_address):
+                                    print(f"⏭️ Skipping duplicate token: {token_name}")
+                                    continue
+                                
+                                # Mark token as processed in database
+                                self.mark_token_processed(token_name, mint_address, wallet_address, signature)
+                                
                                 new_token_count += 1
                                 total_new_tokens += 1
-                                logger.info(f"New token launch detected for {wallet_address}: {token_info['mint']}")
-                                print(f"🆕 NEW TOKEN LAUNCH DETECTED! (#{new_token_count})")
+                                logger.info(f"New token launch detected for {wallet_address}: {token_info['mint']} - {token_name}")
+                                print(f"🆕 NEW TOKEN LAUNCH DETECTED! (#{new_token_count}) - {token_name}")
                                 
-                                # Get token metadata and age
-                                token_metadata = self.get_token_metadata(token_info['mint'])
+                                # Get token age
                                 token_age = self.get_token_age(token_info['mint'])
                                 
                                 # Create and send alert
@@ -712,8 +894,8 @@ class SolanaWalletMonitor:
                                 
                                 self.send_telegram_alert(alert_message, chat_id)
                         
-                        # Mark as processed
-                        self.processed_signatures.add(signature_key)
+                        # Mark signature as processed in database
+                        self.mark_signature_processed(signature)
                     
                     if new_token_count > 0:
                         print(f"🎉 Wallet {wallet_address[:8]}... - Found {new_token_count} new token purchases!")
@@ -785,6 +967,7 @@ Welcome! I can monitor Solana wallets for new token launches.
 /addwallet <wallet_address> - Add a wallet to monitor
 /removewallet <wallet_address> - Remove a wallet from monitoring
 /listwallets - Show all monitored wallets
+/stats - Show database statistics
 /help - Show this help message
 
 *Example:*
@@ -829,6 +1012,18 @@ Welcome! I can monitor Solana wallets for new token launches.
             
             self.send_message(chat_id, msg)
             
+        elif command == "/stats":
+            stats = self.monitor.get_database_stats()
+            stats_msg = f"""📊 *Database Statistics*
+
+🔢 *Total Processed Tokens:* {stats['total_tokens']}
+📝 *Total Processed Signatures:* {stats['total_signatures']}
+⏰ *Recent Tokens (24h):* {stats['recent_tokens_24h']}
+
+💾 *Database:* `token_alerts.db`
+🧹 *Auto Cleanup:* Every 7 days"""
+            self.send_message(chat_id, stats_msg)
+            
         elif command == "/help":
             help_msg = """🤖 *Solana Wallet Monitor Bot Help*
 
@@ -836,6 +1031,7 @@ Welcome! I can monitor Solana wallets for new token launches.
 /addwallet <wallet_address> - Add a wallet to monitor
 /removewallet <wallet_address> - Remove a wallet from monitoring  
 /listwallets - Show all monitored wallets
+/stats - Show database statistics
 /help - Show this help message
 
 *Features:*
@@ -843,6 +1039,8 @@ Welcome! I can monitor Solana wallets for new token launches.
 • Sends real-time alerts when new tokens are detected
 • Supports multiple wallets per user
 • Zero misses - catches every new token purchase
+• Database prevents duplicate alerts
+• Auto cleanup of old entries
 
 *Example:*
 /addwallet gasTzr94Pmp4Gf8vknQnqxeYxdgwFjbgdJa4msYRpnB"""

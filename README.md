@@ -10,6 +10,8 @@
 - **Public Bot** - Anyone can use with simple commands
 - **Zero Misses** - Catches every new token purchase
 - **Enhanced Metadata** - Real token names, symbols, and information
+- **Database System** - SQLite database prevents duplicate alerts
+- **Auto Cleanup** - Automatically cleans up old database entries
 
 ## 📱 Commands
 
@@ -17,6 +19,7 @@
 - `/addwallet <address>` - Add a wallet to monitor
 - `/removewallet <address>` - Remove a wallet from monitoring
 - `/listwallets` - Show all monitored wallets
+- `/stats` - Show database statistics
 - `/help` - Show help message
 
 ## 🔧 Setup
@@ -35,6 +38,18 @@ The bot monitors specified Solana wallets and detects new token launches by anal
 - Recent transactions (last 20)
 
 When a new token is detected, it fetches metadata from multiple sources and sends a formatted alert to Telegram.
+
+## 🗄️ Database System
+
+The bot uses SQLite database (`token_alerts.db`) to:
+- **Prevent Duplicate Alerts**: Tracks processed tokens by name and mint address
+- **Transaction History**: Stores processed transaction signatures
+- **Auto Cleanup**: Automatically removes entries older than 7 days
+- **Statistics**: Provides database stats via `/stats` command
+
+### Database Tables:
+- `processed_tokens` - Tracks detected tokens (name, mint, wallet, signature, timestamp)
+- `processed_signatures` - Tracks processed transaction signatures
 
 ## 📊 Supported APIs
 
