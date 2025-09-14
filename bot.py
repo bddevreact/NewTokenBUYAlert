@@ -570,7 +570,7 @@ class SolanaWalletMonitor:
  🔗 *Mint:* `{token_info['mint']}`
  💰 *Amount:* {amount} {token_symbol}
  ⏰ *Age:* {token_age}
- 🔍 *TX:* `{signature}`
+ 🔍 *TX:* [Click Here](https://solscan.io/tx/{signature})
  
  👤 *Wallet:* `{wallet_address}`
  🕐 *Time:* {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}
