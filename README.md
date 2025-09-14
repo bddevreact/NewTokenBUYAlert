@@ -55,7 +55,7 @@ When a new token is detected, it fetches metadata from multiple sources and send
 🔗 Mint: mint_address
 💰 Amount: 1,000,000 SYMBOL
 ⏰ Age: 5 minutes
-🔍 TX: https://solscan.io/tx/...
+🔍 TX: transaction_signature
 
 👤 Wallet: wallet_address
 🕐 Time: 2025-09-14 22:30:00 UTC
