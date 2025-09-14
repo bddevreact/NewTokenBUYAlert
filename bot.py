@@ -35,11 +35,10 @@ class SolanaWalletMonitor:
                 CREATE TABLE IF NOT EXISTS processed_tokens (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     token_name TEXT NOT NULL,
-                    mint_address TEXT NOT NULL,
+                    mint_address TEXT UNIQUE NOT NULL,
                     wallet_address TEXT NOT NULL,
                     transaction_signature TEXT NOT NULL,
-                    detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(token_name, mint_address)
+                    detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
             
@@ -60,20 +59,25 @@ class SolanaWalletMonitor:
             logger.error(f"Error initializing database: {e}")
     
     def is_token_processed(self, token_name: str, mint_address: str) -> bool:
-        """Check if token has already been processed"""
+        """Check if token has already been processed (by mint address)"""
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
+            # Check by mint address first (primary check)
             cursor.execute('''
                 SELECT COUNT(*) FROM processed_tokens 
-                WHERE token_name = ? AND mint_address = ?
-            ''', (token_name, mint_address))
+                WHERE mint_address = ?
+            ''', (mint_address,))
             
             count = cursor.fetchone()[0]
             conn.close()
             
-            return count > 0
+            if count > 0:
+                print(f"🔍 Found existing mint address: {mint_address[:8]}...")
+                return True
+            
+            return False
             
         except Exception as e:
             logger.error(f"Error checking processed token: {e}")
@@ -86,13 +90,14 @@ class SolanaWalletMonitor:
             cursor = conn.cursor()
             
             cursor.execute('''
-                INSERT OR IGNORE INTO processed_tokens 
+                INSERT OR REPLACE INTO processed_tokens 
                 (token_name, mint_address, wallet_address, transaction_signature)
                 VALUES (?, ?, ?, ?)
             ''', (token_name, mint_address, wallet_address, signature))
             
             conn.commit()
             conn.close()
+            print(f"💾 Saved to database: {token_name} ({mint_address[:8]}...)")
             
         except Exception as e:
             logger.error(f"Error marking token as processed: {e}")
@@ -160,7 +165,11 @@ class SolanaWalletMonitor:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
-            # Count processed tokens
+            # Count unique mint addresses (processed tokens)
+            cursor.execute('SELECT COUNT(DISTINCT mint_address) FROM processed_tokens')
+            unique_mints = cursor.fetchone()[0]
+            
+            # Count total processed tokens
             cursor.execute('SELECT COUNT(*) FROM processed_tokens')
             token_count = cursor.fetchone()[0]
             
@@ -178,6 +187,7 @@ class SolanaWalletMonitor:
             conn.close()
             
             return {
+                'unique_mints': unique_mints,
                 'total_tokens': token_count,
                 'total_signatures': signature_count,
                 'recent_tokens_24h': recent_tokens
@@ -185,7 +195,7 @@ class SolanaWalletMonitor:
             
         except Exception as e:
             logger.error(f"Error getting database stats: {e}")
-            return {'total_tokens': 0, 'total_signatures': 0, 'recent_tokens_24h': 0}
+            return {'unique_mints': 0, 'total_tokens': 0, 'total_signatures': 0, 'recent_tokens_24h': 0}
         
     def get_recent_transactions(self, wallet_address: str, limit: int = 50) -> List[Dict]:
         """Get recent transactions for the specified wallet using RPC"""
@@ -871,9 +881,9 @@ class SolanaWalletMonitor:
                                 token_name = token_metadata['name']
                                 mint_address = token_info['mint']
                                 
-                                # Check for duplicate token in database
+                                # Check for duplicate token in database (by mint address)
                                 if self.is_token_processed(token_name, mint_address):
-                                    print(f"⏭️ Skipping duplicate token: {token_name}")
+                                    print(f"⏭️ Skipping duplicate token: {token_name} (Mint: {mint_address[:8]}...)")
                                     continue
                                 
                                 # Mark token as processed in database
@@ -1016,12 +1026,14 @@ Welcome! I can monitor Solana wallets for new token launches.
             stats = self.monitor.get_database_stats()
             stats_msg = f"""📊 *Database Statistics*
 
+🪙 *Unique Mint Addresses:* {stats['unique_mints']}
 🔢 *Total Processed Tokens:* {stats['total_tokens']}
 📝 *Total Processed Signatures:* {stats['total_signatures']}
 ⏰ *Recent Tokens (24h):* {stats['recent_tokens_24h']}
 
 💾 *Database:* `token_alerts.db`
-🧹 *Auto Cleanup:* Every 7 days"""
+🧹 *Auto Cleanup:* Every 7 days
+🔒 *Duplicate Prevention:* By mint address"""
             self.send_message(chat_id, stats_msg)
             
         elif command == "/help":
