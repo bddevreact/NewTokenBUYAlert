@@ -802,8 +802,8 @@ class SolanaWalletMonitor:
             logger.error(f"Error checking token age: {e}")
             return True  # Default to showing if error
     
-    def is_first_time_buy_within_1minute(self, token_metadata: Dict, transaction_time: int) -> bool:
-        """Check if this is a first-time buy within 1 minute of token being paired on DEX"""
+    def is_first_time_buy_within_5minutes(self, token_metadata: Dict, transaction_time: int) -> bool:
+        """Check if this is a first-time buy within 5 minutes of token being paired on DEX"""
         try:
             paired_age = token_metadata.get('paired_age', 'Unknown')
             
@@ -813,10 +813,10 @@ class SolanaWalletMonitor:
             # Parse paired age string
             if 'seconds' in paired_age:
                 seconds = int(paired_age.split()[0])
-                return seconds <= 60  # Within 1 minute
+                return seconds <= 300  # Within 5 minutes (300 seconds)
             elif 'minutes' in paired_age:
                 minutes = int(paired_age.split()[0])
-                return minutes == 0  # Exactly 0 minutes (less than 1 minute)
+                return minutes <= 5  # Within 5 minutes
             elif 'hour' in paired_age:
                 return False  # Too old for first-time buy
             elif 'day' in paired_age:
@@ -978,12 +978,12 @@ class SolanaWalletMonitor:
         return self.monitored_wallets.copy()
     
     def monitor_wallets(self, check_interval: int = 3):
-        """Main monitoring loop for all wallets - Only first-time buys within 1 minute of pairing"""
+        """Main monitoring loop for all wallets - Only first-time buys within 5 minutes of pairing"""
         logger.info("Starting multi-wallet monitoring")
         logger.info(f"Check interval: {check_interval} seconds")
         print(f"🔍 Monitoring {len(self.monitored_wallets)} wallets")
         print(f"⏰ Check interval: {check_interval} seconds")
-        print("🎯 FILTER: Only first-time buys within 1 minute of pairing!")
+        print("🎯 FILTER: Only first-time buys within 5 minutes of pairing!")
         print("Press Ctrl+C to stop...")
         
         self.running = True
@@ -1048,8 +1048,8 @@ class SolanaWalletMonitor:
                                     print(f"⏭️ Skipping duplicate token: {token_name} (Mint: {mint_address[:8]}...)")
                                     continue
                                 
-                                # Check if this is a first-time buy within 1 minute of pairing
-                                if not self.is_first_time_buy_within_1minute(token_metadata, tx_time):
+                                # Check if this is a first-time buy within 5 minutes of pairing
+                                if not self.is_first_time_buy_within_5minutes(token_metadata, tx_time):
                                     paired_age = token_metadata.get('paired_age', 'Unknown')
                                     print(f"⏭️ Skipping non-first-time buy: {token_name} (Paired Age: {paired_age})")
                                     continue
