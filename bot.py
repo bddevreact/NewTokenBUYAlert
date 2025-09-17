@@ -1241,7 +1241,7 @@ Welcome! I can monitor Solana wallets for new token launches.
 def main():
     """Main function to run the Telegram bot with wallet monitoring"""
     # Configuration
-    TELEGRAM_BOT_TOKEN = "8009064444:AAHznjdM0wkphTbhsP_kOWOqxdatXS1w4C0"
+    TELEGRAM_BOT_TOKEN = "7769614635:AAGdttl3pvrgckvODwYxhGIqFh9WQ7jDSwM"
     RPC_URL = "https://api.mainnet-beta.solana.com"
     CHECK_INTERVAL = 3  # Check every 3 seconds
     
