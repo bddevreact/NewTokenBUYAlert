@@ -775,33 +775,6 @@ class SolanaWalletMonitor:
             logger.error(f"Error getting token age for {mint_address}: {e}")
             return "Unknown"
     
-    def is_token_age_less_than_24h(self, token_metadata: Dict) -> bool:
-        """Check if token age is less than 24 hours based on paired age from DexScreener"""
-        try:
-            paired_age = token_metadata.get('paired_age', 'Unknown')
-            
-            if paired_age == 'Unknown':
-                return True  # If we can't determine age, assume it's new
-            
-            # Parse paired age string
-            if 'seconds' in paired_age:
-                return True  # Less than 1 minute
-            elif 'minutes' in paired_age:
-                minutes = int(paired_age.split()[0])
-                return minutes < 1440  # 24 hours = 1440 minutes
-            elif 'hours' in paired_age:
-                hours = int(paired_age.split()[0])
-                return hours < 24
-            elif 'day' in paired_age:
-                days = int(paired_age.split()[0])
-                return days < 1  # Less than 1 day (0 days = less than 24h)
-            
-            return True  # Default to showing if we can't parse
-            
-        except Exception as e:
-            logger.error(f"Error checking token age: {e}")
-            return True  # Default to showing if error
-    
     def is_first_time_buy_within_5minutes(self, token_metadata: Dict, transaction_time: int) -> bool:
         """Check if this is a first-time buy within 5 minutes of token being paired on DEX"""
         try:
