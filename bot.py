@@ -775,6 +775,33 @@ class SolanaWalletMonitor:
             logger.error(f"Error getting token age for {mint_address}: {e}")
             return "Unknown"
     
+    def is_token_age_less_than_24h(self, token_metadata: Dict) -> bool:
+        """Check if token age is less than 24 hours based on paired age from DexScreener"""
+        try:
+            paired_age = token_metadata.get('paired_age', 'Unknown')
+            
+            if paired_age == 'Unknown':
+                return True  # If we can't determine age, assume it's new
+            
+            # Parse paired age string
+            if 'seconds' in paired_age:
+                return True  # Less than 1 minute
+            elif 'minutes' in paired_age:
+                minutes = int(paired_age.split()[0])
+                return minutes < 1440  # 24 hours = 1440 minutes
+            elif 'hours' in paired_age:
+                hours = int(paired_age.split()[0])
+                return hours < 24
+            elif 'day' in paired_age:
+                days = int(paired_age.split()[0])
+                return days < 1  # Less than 1 day (0 days = less than 24h)
+            
+            return True  # Default to showing if we can't parse
+            
+        except Exception as e:
+            logger.error(f"Error checking token age: {e}")
+            return True  # Default to showing if error
+    
     def format_amount(self, amount: str, decimals: int) -> str:
         """Format token amount with proper decimal places"""
         try:
@@ -925,12 +952,12 @@ class SolanaWalletMonitor:
         return self.monitored_wallets.copy()
     
     def monitor_wallets(self, check_interval: int = 3):
-        """Main monitoring loop for all wallets - ZERO MISSES, catch EVERYTHING"""
+        """Main monitoring loop for all wallets - Only tokens less than 24 hours old"""
         logger.info("Starting multi-wallet monitoring")
         logger.info(f"Check interval: {check_interval} seconds")
         print(f"🔍 Monitoring {len(self.monitored_wallets)} wallets")
         print(f"⏰ Check interval: {check_interval} seconds")
-        print("🎯 ZERO MISSES - Catching EVERY new token purchase!")
+        print("🎯 FILTER: Only tokens less than 24 hours old!")
         print("Press Ctrl+C to stop...")
         
         self.running = True
@@ -993,6 +1020,12 @@ class SolanaWalletMonitor:
                                 # Check for duplicate token in database (by mint address)
                                 if self.is_token_processed(token_name, mint_address):
                                     print(f"⏭️ Skipping duplicate token: {token_name} (Mint: {mint_address[:8]}...)")
+                                    continue
+                                
+                                # Check if token age is less than 24 hours
+                                if not self.is_token_age_less_than_24h(token_metadata):
+                                    paired_age = token_metadata.get('paired_age', 'Unknown')
+                                    print(f"⏭️ Skipping old token: {token_name} (Paired Age: {paired_age})")
                                     continue
                                 
                                 # Mark token as processed in database

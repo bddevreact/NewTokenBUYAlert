@@ -1,6 +1,6 @@
 # NewTokenBUYAlert
 
-🤖 **Solana Wallet Monitor Bot** - Real-time new token launch detection and alerts!
+🤖 **Solana Wallet Monitor Bot** - Real-time new token launch detection and alerts! **Only shows tokens less than 24 hours old** for the freshest opportunities.
 
 ## 🚀 Features
 
@@ -65,6 +65,7 @@ The bot uses SQLite database (`token_alerts.db`) to:
 
 ### 🎯 Enhanced Features:
 - **Paired Age Detection**: Shows when token was first paired on DEX (from DexScreener)
+- **24-Hour Age Filter**: Only shows tokens that are less than 24 hours old
 - **Real-time Price**: Current USD price from DexScreener
 - **DEX Information**: Shows which DEX the token is paired on
 - **Smart Price Formatting**: Automatically formats prices based on value (8 decimals for micro tokens, 4 for regular)
