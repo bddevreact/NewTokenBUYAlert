@@ -56,12 +56,18 @@ The bot uses SQLite database (`token_alerts.db`) to:
 ## 📊 Supported APIs
 
 - **PumpFun API** - Best for new launched tokens
-- **DexScreener API** - Professional token analysis
+- **DexScreener API** - Professional token analysis with **paired age** (when token was first paired on DEX)
 - **Jupiter API** - General token metadata
 - **Solscan API** - Additional token information
 - **Birdeye API** - Professional token data
 - **CoinGecko API** - Popular token database
 - **Metaplex Metadata** - On-chain metadata
+
+### 🎯 Enhanced Features:
+- **Paired Age Detection**: Shows when token was first paired on DEX (from DexScreener)
+- **Real-time Price**: Current USD price from DexScreener
+- **DEX Information**: Shows which DEX the token is paired on
+- **Smart Price Formatting**: Automatically formats prices based on value (8 decimals for micro tokens, 4 for regular)
 
 ## 🚨 Alert Format
 
@@ -71,8 +77,10 @@ The bot uses SQLite database (`token_alerts.db`) to:
 🪙 Token: Token Name (SYMBOL)
 🔗 Mint: mint_address
 💰 Amount: 1,000,000 SYMBOL
-⏰ Age: 5 minutes
+⏰ Paired Age: 2 hours
 🔍 TX: transaction_signature
+💵 Price: $0.000123
+🏪 DEX: RAYDIUM
 
 👤 Wallet: wallet_address
 🕐 Time: 2025-09-14 22:30:00 UTC

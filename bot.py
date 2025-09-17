@@ -566,7 +566,7 @@ class SolanaWalletMonitor:
             return {'name': 'Unknown Token', 'symbol': 'UNKNOWN', 'decimals': 9}
     
     def get_dexscreener_metadata(self, mint_address: str) -> Dict:
-        """Get token metadata from DexScreener API - Best for new tokens"""
+        """Get token metadata from DexScreener API - Best for new tokens with paired age"""
         try:
             url = f"https://api.dexscreener.com/latest/dex/tokens/{mint_address}"
             headers = {
@@ -581,10 +581,41 @@ class SolanaWalletMonitor:
                     pair = data['pairs'][0]
                     base_token = pair.get('baseToken', {})
                     
+                    # Get pair creation time (paired age)
+                    pair_created_at = pair.get('pairCreatedAt')
+                    paired_age = None
+                    
+                    if pair_created_at:
+                        try:
+                            # Convert timestamp to readable format
+                            import datetime
+                            pair_time = datetime.datetime.fromtimestamp(pair_created_at / 1000)
+                            now = datetime.datetime.now()
+                            age_diff = now - pair_time
+                            
+                            if age_diff.days > 0:
+                                paired_age = f"{age_diff.days} days"
+                            elif age_diff.seconds > 3600:
+                                hours = age_diff.seconds // 3600
+                                paired_age = f"{hours} hours"
+                            elif age_diff.seconds > 60:
+                                minutes = age_diff.seconds // 60
+                                paired_age = f"{minutes} minutes"
+                            else:
+                                paired_age = f"{age_diff.seconds} seconds"
+                                
+                        except Exception as e:
+                            logger.error(f"Error calculating paired age: {e}")
+                            paired_age = "Unknown"
+                    
                     return {
                         'name': base_token.get('name', 'Unknown Token'),
                         'symbol': base_token.get('symbol', 'UNKNOWN'),
-                        'decimals': base_token.get('decimals', 9)
+                        'decimals': base_token.get('decimals', 9),
+                        'paired_age': paired_age,
+                        'pair_address': pair.get('pairAddress', ''),
+                        'dex_id': pair.get('dexId', ''),
+                        'price_usd': pair.get('priceUsd', '0')
                     }
             
             return {'name': 'Unknown Token', 'symbol': 'UNKNOWN', 'decimals': 9}
@@ -761,6 +792,11 @@ class SolanaWalletMonitor:
         token_name = token_metadata['name']
         token_symbol = token_metadata['symbol']
         
+        # Get paired age from DexScreener if available
+        paired_age = token_metadata.get('paired_age', 'Unknown')
+        dex_id = token_metadata.get('dex_id', '')
+        price_usd = token_metadata.get('price_usd', '0')
+        
         # Add emoji based on token type
         if 'pump' in token_name.lower() or 'pump' in token_symbol.lower():
             token_emoji = "🚀"
@@ -773,12 +809,31 @@ class SolanaWalletMonitor:
         else:
             token_emoji = "🪙"
         
+        # Format price if available
+        price_display = ""
+        if price_usd and price_usd != '0' and float(price_usd) > 0:
+            try:
+                price_float = float(price_usd)
+                if price_float < 0.000001:
+                    price_display = f"💵 *Price:* ${price_float:.8f}"
+                elif price_float < 0.01:
+                    price_display = f"💵 *Price:* ${price_float:.6f}"
+                else:
+                    price_display = f"💵 *Price:* ${price_float:.4f}"
+            except:
+                price_display = ""
+        
+        # Format DEX info
+        dex_display = ""
+        if dex_id:
+            dex_display = f"🏪 *DEX:* {dex_id.upper()}"
+        
         message = f"""🚨 *New Token Buy Alert* 🚨
  
  {token_emoji} *Token:* {token_name} ({token_symbol})
  🔗 *Mint:* `{token_info['mint']}`
  💰 *Amount:* {amount} {token_symbol}
- ⏰ *Age:* {token_age}
+ ⏰ *Paired Age:* {paired_age}
  🔍 *TX:* `{signature}`
  
  👤 *Wallet:* `{wallet_address}`
@@ -790,6 +845,29 @@ class SolanaWalletMonitor:
  • [View on Solscan](https://solscan.io/token/{token_info['mint']})
  • [TX Details](https://solscan.io/tx/{signature})
  • [Add to Wallet](solana:{token_info['mint']})"""
+        
+        # Add price and DEX info if available
+        if price_display or dex_display:
+            info_lines = []
+            if price_display:
+                info_lines.append(price_display)
+            if dex_display:
+                info_lines.append(dex_display)
+            
+            # Insert after the TX line
+            lines = message.split('\n')
+            insert_index = 0
+            for i, line in enumerate(lines):
+                if 'TX:' in line:
+                    insert_index = i + 1
+                    break
+            
+            for info_line in info_lines:
+                lines.insert(insert_index, info_line)
+                insert_index += 1
+            
+            message = '\n'.join(lines)
+        
         return message.strip()
     
     def send_telegram_alert(self, message: str, chat_id: str):
